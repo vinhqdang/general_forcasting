@@ -109,29 +109,35 @@ class ForecastingModel:
     
     def fit(self, 
             train_data: pd.DataFrame,
-            target_column: str,
+            target_variable: str,
             date_column: str = 'date',
+            feature_list: Optional[List[str]] = None,
             **fit_params) -> 'ForecastingModel':
         """
         Fit the forecasting model to training data.
         
         Args:
             train_data: Training dataset
-            target_column: Name of the target variable column
+            target_variable: Name of the main target variable
             date_column: Name of the date column
+            feature_list: List of feature column names (None for auto-detect)
             **fit_params: Additional parameters for fitting
             
         Returns:
             Fitted forecasting model
         """
         try:
-            self.model.fit(train_data, target_column, date_column, **fit_params)
+            self.model.fit(train_data, target_variable, date_column, feature_list, **fit_params)
             self.is_fitted = True
             
             # Store fitting metadata
             self.metadata.update(self.model.get_metadata())
+            self.metadata['target_variable'] = target_variable
+            self.metadata['feature_list'] = feature_list
             
             logger.info(f"{self.model_type} model fitted successfully")
+            logger.info(f"Target variable: {target_variable}")
+            logger.info(f"Features used: {feature_list}")
             return self
             
         except Exception as e:

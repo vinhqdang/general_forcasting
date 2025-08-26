@@ -27,7 +27,7 @@ class MockModel(BaseForecastingModel):
         super().__init__("MockModel", **kwargs)
         self.test_param = test_param
         
-    def fit(self, train_data, target_column, date_column, **kwargs):
+    def fit(self, train_data, target_variable, date_column='date', feature_list=None, **kwargs):
         self.is_fitted = True
         self.fit_time = 0.1
         return self
@@ -289,9 +289,10 @@ class TestConvenienceFunctions:
     
     def test_create_arima_model(self):
         """Test creating ARIMA model via convenience function."""
-        # Since statsmodels is not installed, this should raise ImportError
-        with pytest.raises(ImportError, match="statsmodels is required"):
-            create_arima_model(order=(1, 1, 1))
+        # Test successful creation of ARIMA model
+        model = create_arima_model(order=(1, 1, 1))
+        assert model.model_type == 'arima'
+        assert model.model_params['order'] == (1, 1, 1)
     
     def test_create_xgboost_model(self):
         """Test creating XGBoost model via convenience function."""

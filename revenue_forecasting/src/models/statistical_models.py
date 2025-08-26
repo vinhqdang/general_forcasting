@@ -51,22 +51,27 @@ class ARIMAModel(BaseForecastingModel):
         
     def fit(self, 
             train_data: pd.DataFrame,
-            target_column: str,
-            date_column: str,
+            target_variable: str,
+            date_column: str = 'date',
+            feature_list: Optional[List[str]] = None,
             **kwargs) -> 'ARIMAModel':
         """Fit the ARIMA model."""
         start_time = datetime.now()
         
-        self.validate_input(train_data, target_column, date_column)
+        self.validate_input(train_data, target_variable, date_column, feature_list)
         
         # Store data info
         self.train_data = train_data.copy()
-        self.target_column = target_column
+        self.target_variable = target_variable
         self.date_column = date_column
+        self.feature_list = feature_list or []
+        
+        # For backward compatibility
+        self.target_column = target_variable
         
         # Prepare time series
         df = train_data.set_index(pd.to_datetime(train_data[date_column]))
-        ts = df[target_column].dropna()
+        ts = df[target_variable].dropna()
         
         try:
             # Create and fit model

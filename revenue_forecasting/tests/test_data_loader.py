@@ -35,7 +35,7 @@ class TestDataLoader:
         """Create a DataLoader instance."""
         return DataLoader(
             date_column='date',
-            target_column='revenue',
+            target_variable='revenue',  # Updated parameter name
             frequency='D'
         )
     
@@ -43,15 +43,17 @@ class TestDataLoader:
         """Test DataLoader initialization."""
         loader = DataLoader(
             date_column='timestamp',
-            target_column='sales',
+            target_variable='sales',  # Updated parameter name
             frequency='H'
         )
         
         assert loader.date_column == 'timestamp'
-        assert loader.target_column == 'sales'
+        assert loader.target_variable == 'sales'
+        assert loader.target_column == 'sales'  # Backward compatibility
         assert loader.frequency == 'H'
         assert loader.data is None
         assert isinstance(loader.metadata, dict)
+        assert isinstance(loader.feature_list, list)
     
     def test_load_from_dataframe(self, data_loader, sample_data):
         """Test loading data from DataFrame."""
@@ -233,12 +235,13 @@ class TestDataLoader:
         frequencies = ['D', 'H', 'W', 'M']
         
         for freq in frequencies:
-            loader = DataLoader(frequency=freq)
+            loader = DataLoader(frequency=freq, target_variable='test_target')
             assert loader.frequency == freq
+            assert loader.target_variable == 'test_target'
     
     def test_chain_operations(self, sample_data):
         """Test chaining multiple operations."""
-        loader = DataLoader()
+        loader = DataLoader(target_variable='revenue')  # Specify target
         
         # Load data first
         loader.load_from_dataframe(sample_data)
@@ -278,7 +281,7 @@ class TestDataLoaderIntegration:
         # Create loader and process
         loader = DataLoader(
             date_column='date',
-            target_column='revenue',
+            target_variable='revenue',
             frequency='D'
         )
         

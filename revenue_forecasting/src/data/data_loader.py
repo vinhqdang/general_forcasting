@@ -22,21 +22,27 @@ class DataLoader:
     
     def __init__(self, 
                  date_column: str = 'date',
-                 target_column: str = 'revenue',
+                 target_variable: str = 'revenue',
+                 feature_list: Optional[List[str]] = None,
                  frequency: str = 'D'):
         """
         Initialize DataLoader.
         
         Args:
             date_column: Name of the datetime column
-            target_column: Name of the target variable column
+            target_variable: Name of the main target variable column
+            feature_list: List of feature column names (optional, will auto-detect if None)
             frequency: Data frequency (D=daily, H=hourly, W=weekly, M=monthly)
         """
         self.date_column = date_column
-        self.target_column = target_column
+        self.target_variable = target_variable
+        self.feature_list = feature_list or []
         self.frequency = frequency
         self.data = None
         self.metadata = {}
+        
+        # For backward compatibility
+        self.target_column = target_variable
         
     def load_from_file(self, 
                       file_path: Union[str, Path],
@@ -96,8 +102,97 @@ class DataLoader:
         self.metadata['load_time'] = datetime.now()
         self.metadata['original_shape'] = df.shape
         
+        # Auto-detect feature columns if not specified
+        if not self.feature_list:
+            self.feature_list = self._auto_detect_features(df)
+            
         logger.info(f"Loaded data from DataFrame with shape {df.shape}")
+        logger.info(f"Target variable: {self.target_variable}")
+        logger.info(f"Feature columns: {self.feature_list}")
+        
         return self.data
+    
+    def _auto_detect_features(self, df: pd.DataFrame) -> List[str]:
+        """
+        Automatically detect feature columns from the DataFrame.
+        
+        Args:
+            df: Input DataFrame
+            
+        Returns:
+            List of feature column names
+        """
+        # Exclude date and target columns
+        exclude_columns = {self.date_column, self.target_variable}
+        
+        # Include numeric columns by default
+        feature_columns = []
+        for col in df.columns:
+            if col not in exclude_columns:
+                # Include numeric columns with reasonable cardinality
+                if df[col].dtype in ['int64', 'float64', 'int32', 'float32']:
+                    unique_vals = df[col].nunique()
+                    # Exclude high-cardinality numeric columns (likely IDs or sequential indices)
+                    # Allow columns with less than 95% unique values or those with reasonable ranges
+                    if unique_vals < len(df) * 0.95 or unique_vals <= 1000:
+                        feature_columns.append(col)
+                elif df[col].dtype == 'object':
+                    # Include categorical columns with reasonable number of unique values
+                    unique_vals = df[col].nunique()
+                    if unique_vals <= 20:  # Reasonable number of categories
+                        feature_columns.append(col)
+        
+        return feature_columns
+    
+    def set_feature_list(self, feature_list: List[str]) -> None:
+        """
+        Manually set the feature list.
+        
+        Args:
+            feature_list: List of feature column names
+        """
+        if self.data is not None:
+            # Validate that all features exist in the data
+            missing_features = [f for f in feature_list if f not in self.data.columns]
+            if missing_features:
+                raise ValueError(f"Feature columns not found in data: {missing_features}")
+        
+        self.feature_list = feature_list
+        logger.info(f"Feature list updated: {self.feature_list}")
+    
+    def add_features(self, new_features: List[str]) -> None:
+        """
+        Add new features to the existing feature list.
+        
+        Args:
+            new_features: List of new feature column names to add
+        """
+        if self.data is not None:
+            # Validate that all new features exist in the data
+            missing_features = [f for f in new_features if f not in self.data.columns]
+            if missing_features:
+                raise ValueError(f"Feature columns not found in data: {missing_features}")
+        
+        for feature in new_features:
+            if feature not in self.feature_list:
+                self.feature_list.append(feature)
+        
+        logger.info(f"Added features: {new_features}")
+        logger.info(f"Updated feature list: {self.feature_list}")
+    
+    def remove_features(self, features_to_remove: List[str]) -> None:
+        """
+        Remove features from the feature list.
+        
+        Args:
+            features_to_remove: List of feature column names to remove
+        """
+        for feature in features_to_remove:
+            if feature in self.feature_list:
+                self.feature_list.remove(feature)
+        
+        logger.info(f"Removed features: {features_to_remove}")
+        logger.info(f"Updated feature list: {self.feature_list}")
     
     def validate_data(self) -> Dict[str, Any]:
         """
@@ -111,13 +206,19 @@ class DataLoader:
             
         validation_results = {
             'has_date_column': self.date_column in self.data.columns,
-            'has_target_column': self.target_column in self.data.columns,
+            'has_target_variable': self.target_variable in self.data.columns,
+            'target_variable': self.target_variable,
+            'feature_list': self.feature_list,
+            'missing_features': [f for f in self.feature_list if f not in self.data.columns],
             'missing_values': self.data.isnull().sum().to_dict(),
             'duplicate_dates': 0,
             'date_range': None,
             'data_points': len(self.data),
             'columns': list(self.data.columns)
         }
+        
+        # For backward compatibility
+        validation_results['has_target_column'] = validation_results['has_target_variable']
         
         if validation_results['has_date_column']:
             try:
@@ -251,14 +352,31 @@ class DataLoader:
         info = {
             'shape': self.data.shape,
             'columns': list(self.data.columns),
+            'target_variable': self.target_variable,
+            'feature_list': self.feature_list,
+            'feature_count': len(self.feature_list),
             'dtypes': self.data.dtypes.to_dict(),
             'memory_usage': self.data.memory_usage(deep=True).sum(),
             'metadata': self.metadata
         }
         
-        if self.target_column in self.data.columns:
-            target_stats = self.data[self.target_column].describe()
+        if self.target_variable in self.data.columns:
+            target_stats = self.data[self.target_variable].describe()
             info['target_statistics'] = target_stats.to_dict()
+            
+        # Feature statistics
+        if self.feature_list:
+            feature_stats = {}
+            for feature in self.feature_list:
+                if feature in self.data.columns:
+                    if self.data[feature].dtype in ['int64', 'float64', 'int32', 'float32']:
+                        feature_stats[feature] = self.data[feature].describe().to_dict()
+                    else:
+                        feature_stats[feature] = {
+                            'unique_values': self.data[feature].nunique(),
+                            'most_common': self.data[feature].value_counts().head(3).to_dict()
+                        }
+            info['feature_statistics'] = feature_stats
         
         return info
     

@@ -37,16 +37,18 @@ class BaseForecastingModel(ABC):
     @abstractmethod
     def fit(self, 
             train_data: pd.DataFrame,
-            target_column: str,
-            date_column: str,
+            target_variable: str,
+            date_column: str = 'date',
+            feature_list: Optional[List[str]] = None,
             **kwargs) -> 'BaseForecastingModel':
         """
         Fit the model to training data.
         
         Args:
             train_data: Training dataset
-            target_column: Name of the target variable
+            target_variable: Name of the main target variable
             date_column: Name of the date column
+            feature_list: List of feature column names (None for auto-detect)
             **kwargs: Additional fitting parameters
             
         Returns:
@@ -153,15 +155,17 @@ class BaseForecastingModel(ABC):
     
     def validate_input(self, 
                       data: pd.DataFrame,
-                      target_column: str,
-                      date_column: str) -> None:
+                      target_variable: str,
+                      date_column: str,
+                      feature_list: Optional[List[str]] = None) -> None:
         """
         Validate input data.
         
         Args:
             data: Input DataFrame
-            target_column: Name of the target variable
+            target_variable: Name of the target variable
             date_column: Name of the date column
+            feature_list: List of feature column names
             
         Raises:
             ValueError: If validation fails
@@ -169,14 +173,20 @@ class BaseForecastingModel(ABC):
         if data.empty:
             raise ValueError("Input data is empty")
             
-        if target_column not in data.columns:
-            raise ValueError(f"Target column '{target_column}' not found in data")
+        if target_variable not in data.columns:
+            raise ValueError(f"Target variable '{target_variable}' not found in data")
             
         if date_column not in data.columns:
             raise ValueError(f"Date column '{date_column}' not found in data")
             
-        if data[target_column].isnull().all():
-            raise ValueError("Target column contains only null values")
+        if data[target_variable].isnull().all():
+            raise ValueError("Target variable contains only null values")
+            
+        # Validate feature columns if provided
+        if feature_list:
+            missing_features = [f for f in feature_list if f not in data.columns]
+            if missing_features:
+                raise ValueError(f"Feature columns not found in data: {missing_features}")
             
         try:
             pd.to_datetime(data[date_column])
